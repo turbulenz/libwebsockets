@@ -37,7 +37,6 @@ static const char * const log_level_names[] = {
 	"LATENCY",
 };
 
-
 void
 libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 			 struct libwebsocket *wsi, enum lws_close_status reason)
@@ -444,7 +443,7 @@ libwebsocket_callback_all_protocol(
 	struct libwebsocket *wsi;
 
 	for (n = 0; n < context->fds_count; n++) {
-		wsi = context->lws_lookup[context->fds[n].fd];
+		wsi = wsi_from_fd(context, context->fds[n].fd);
 		if (!wsi)
 			continue;
 		if (wsi->protocol == protocol)
@@ -577,7 +576,7 @@ libwebsocket_rx_flow_allow_all_protocol(
 	struct libwebsocket *wsi;
 
 	for (n = 0; n < context->fds_count; n++) {
-		wsi = context->lws_lookup[context->fds[n].fd];
+		wsi = wsi_from_fd(context, context->fds[n].fd);
 		if (!wsi)
 			continue;
 		if (wsi->protocol == protocol)
