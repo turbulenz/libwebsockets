@@ -313,7 +313,7 @@ enum lws_connection_states {
 	WSI_STATE_RETURNED_CLOSE_ALREADY,
 	WSI_STATE_AWAITING_CLOSE_ACK,
 	WSI_STATE_FLUSHING_STORED_SEND_BEFORE_CLOSE,
-	
+
 	WSI_STATE_HTTP2_AWAIT_CLIENT_PREFACE,
 	WSI_STATE_HTTP2_ESTABLISHED_PRE_SETTINGS,
 	WSI_STATE_HTTP2_ESTABLISHED,
@@ -372,7 +372,7 @@ enum connection_mode {
 
 	LWS_CONNMODE_WS_SERVING,
 	LWS_CONNMODE_WS_CLIENT,
-	
+
 	LWS_CONNMODE_HTTP2_SERVING,
 
 	/* transient, ssl delay hiding */
@@ -412,12 +412,64 @@ struct lws_signal_watcher {
 };
 #endif /* LWS_USE_LIBEV */
 
+struct lws_lookup_entry {
+#if defined(WIN32) || defined(_WIN32)
+	SOCKET fd;
+#else
+	int fd;
+#endif
+	struct libwebsocket *wsi;
+};
+
+#define LWS_LOOKUP(_CONTEXT, _FD, _RES) 								\
+	{																    \
+		(_RES) = 0;													    \
+		for(size_t index = 0; index < (_CONTEXT)->max_fds; ++index)	    \
+		{															    \
+			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))		    \
+			{														    \
+				(_RES) = (_CONTEXT)->lws_lookup_map[index].wsi;		    \
+				break;													\
+			}														    \
+		}															    \
+	}
+
+#define LWS_LOOKUP_INSERT(_CONTEXT, _FD, _WSI)							\
+	{																    \
+		size_t index;													\
+		for(index = 0; index < (_CONTEXT)->max_fds; ++index)	    	\
+		{															    \
+			if ((_CONTEXT)->lws_lookup_map[index].fd == -1)			    \
+			{														    \
+				(_CONTEXT)->lws_lookup_map[index].fd = (_FD);		    \
+				(_CONTEXT)->lws_lookup_map[index].wsi = (_WSI);		    \
+				break;													\
+			}														    \
+		}															    \
+		if (index == (_CONTEXT)->max_fds) {								\
+			lwsl_err("Too many fds, couldn't find slot in lws_lookup_map");	\
+		}																\
+	}
+
+#define LWS_LOOKUP_REMOVE(_CONTEXT, _FD)								\
+	{																    \
+		for(size_t index = 0; index < (_CONTEXT)->max_fds; ++index)	    \
+		{															    \
+			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))		    \
+			{														    \
+				(_CONTEXT)->lws_lookup_map[index].fd = -1;		    	\
+				(_CONTEXT)->lws_lookup_map[index].wsi = 0;		    	\
+				break;													\
+			}														    \
+		}															    \
+	}
+
 struct libwebsocket_context {
 #ifdef _WIN32
 	WSAEVENT *events;
 #endif
 	struct libwebsocket_pollfd *fds;
-	struct libwebsocket **lws_lookup; /* fd to wsi */
+	struct lws_lookup_entry *lws_lookup_map; /* fd to wsi */
 	int fds_count;
 #ifdef LWS_USE_LIBEV
 	struct ev_loop* io_loop;
@@ -548,13 +600,13 @@ struct lws_fragments {
 };
 
 /* notice that these union members:
- * 
+ *
  *  hdr
  *  http
  *  http2
- * 
+ *
  * all have a pointer to allocated_headers struct as their first member.
- * 
+ *
  * It means for allocated_headers access, the three union paths can all be
  * used interchangably to access the same data
  */
@@ -598,7 +650,7 @@ enum lws_http2_settings {
 	LWS_HTTP2_SETTINGS__INITIAL_WINDOW_SIZE,
 	LWS_HTTP2_SETTINGS__MAX_FRAME_SIZE,
 	LWS_HTTP2_SETTINGS__MAX_HEADER_LIST_SIZE,
-	
+
 	LWS_HTTP2_SETTINGS__COUNT /* always last */
 };
 
@@ -613,7 +665,7 @@ enum lws_http2_wellknown_frame_types {
 	LWS_HTTP2_FRAME_TYPE_GOAWAY,
 	LWS_HTTP2_FRAME_TYPE_WINDOW_UPDATE,
 	LWS_HTTP2_FRAME_TYPE_CONTINUATION,
-	
+
 	LWS_HTTP2_FRAME_TYPE_COUNT /* always last */
 };
 
@@ -635,22 +687,22 @@ struct http2_settings {
 };
 
 enum http2_hpack_state {
-	
+
 	/* optional before first header block */
 	HPKS_OPT_PADDING,
 	HKPS_OPT_E_DEPENDENCY,
 	HKPS_OPT_WEIGHT,
-	
+
 	/* header block */
 	HPKS_TYPE,
-	
+
 	HPKS_IDX_EXT,
-	
+
 	HPKS_HLEN,
 	HPKS_HLEN_EXT,
 
 	HPKS_DATA,
-	
+
 	/* optional after last header block */
 	HKPS_OPT_DISCARD_PADDING,
 };
@@ -680,7 +732,7 @@ struct hpack_dynamic_table {
 };
 
 struct _lws_http2_related {
-	/* 
+	/*
 	 * having this first lets us also re-use all HTTP union code
 	 * and in turn, http_mode_related has allocated headers in right
 	 * place so we can use the header apis on the wsi directly still
@@ -689,14 +741,14 @@ struct _lws_http2_related {
 
 	struct http2_settings my_settings;
 	struct http2_settings peer_settings;
-	
+
 	struct libwebsocket *parent_wsi;
 	struct libwebsocket *next_child_wsi;
 
 	struct hpack_dynamic_table *hpack_dyn_table;
-	
+
 	unsigned int count;
-	
+
 	/* frame */
 	unsigned int length;
 	unsigned int stream_id;
@@ -707,7 +759,7 @@ struct _lws_http2_related {
 	unsigned char padding;
 
 	unsigned char ping_payload[8];
-	
+
 	unsigned short round_robin_POLLOUT;
 	unsigned short count_POLLOUT_children;
 
@@ -728,7 +780,7 @@ struct _lws_http2_related {
 	unsigned int hpack_e_dep;
 	unsigned int huff:1;
 	unsigned int value:1;
-	
+
 	/* negative credit is mandated by the spec */
 	int tx_credit;
 	unsigned int my_stream_id;

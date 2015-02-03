@@ -145,10 +145,10 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 		return NULL;
 	}
 
-	context->lws_lookup = lws_zalloc(sizeof(struct libwebsocket *) * context->max_fds);
-	if (context->lws_lookup == NULL) {
+	context->lws_lookup_map = lws_zalloc(sizeof(struct lws_lookup_entry) * context->max_fds);
+	if (context->lws_lookup_map == NULL) {
 		lwsl_err(
-		  "Unable to allocate lws_lookup array for %d connections\n",
+		  "Unable to allocate lws_lookup_map for %d connections\n",
 							      context->max_fds);
 		lws_free(context->fds);
 		lws_free(context);
@@ -156,7 +156,7 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 	}
 
 	if (lws_plat_init_fd_tables(context)) {
-		lws_free(context->lws_lookup);
+		lws_free(context->lws_lookup_map);
 		lws_free(context->fds);
 		lws_free(context);
 		return NULL;
@@ -291,8 +291,8 @@ libwebsocket_context_destroy(struct libwebsocket_context *context)
 #endif
 
 	for (n = 0; n < context->fds_count; n++) {
-		struct libwebsocket *wsi =
-					context->lws_lookup[context->fds[n].fd];
+		struct libwebsocket *wsi = 0;
+		LWS_LOOKUP(context, context->fds[n].fd, wsi);
 		if (!wsi)
 			continue;
 		libwebsocket_close_and_free_session(context,
@@ -329,7 +329,7 @@ libwebsocket_context_destroy(struct libwebsocket_context *context)
 	lws_ssl_context_destroy(context);
 
 	lws_free(context->fds);
-	lws_free(context->lws_lookup);
+	lws_free(context->lws_lookup_map);
 
 	lws_plat_context_late_destroy(context);
 

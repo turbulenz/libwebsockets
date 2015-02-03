@@ -32,27 +32,43 @@ insert_wsi_socket_into_fds(struct libwebsocket_context *context,
 		return 1;
 	}
 
-	if (wsi->sock >= context->max_fds) {
-		lwsl_err("Socket fd %d is too high (%d)\n",
-						wsi->sock, context->max_fds);
-		return 1;
-	}
+	// if (wsi->sock >= context->max_fds) {
+	// 	lwsl_err("Socket fd %d is too high (%d)\n",
+	// 					wsi->sock, context->max_fds);
+	// 	return 1;
+	// }
 
 	assert(wsi);
 	assert(wsi->sock >= 0);
 
 	lwsl_info("insert_wsi_socket_into_fds: wsi=%p, sock=%d, fds pos=%d\n",
-					    wsi, wsi->sock, context->fds_count);
+						wsi, wsi->sock, context->fds_count);
+
+	/* If there is already a websocket with this FD it must've been closed to allow the FD to be reused*/
+	struct libwebsocket *existing_wsi = 0;
+	LWS_LOOKUP(context, wsi->sock, existing_wsi);
+	if (0 != existing_wsi)
+	{
+		libwebsocket_close_and_free_session(context, existing_wsi, LWS_CLOSE_STATUS_NORMAL);
+		/* If it's still there it can't be closed yet so fail */
+		LWS_LOOKUP(context, wsi->sock, existing_wsi);
+		if (0 != existing_wsi)
+		{
+			lwsl_err("Socket fd %d is already in use by wsi (0x%x)\n",
+				wsi->sock, existing_wsi);
+			return 1;
+		}
+	}
 
 	context->protocols[0].callback(context, wsi,
 		LWS_CALLBACK_LOCK_POLL,
 		wsi->user_space, (void *) &pa, 0);
 
-	context->lws_lookup[wsi->sock] = wsi;
+	LWS_LOOKUP_INSERT(context, wsi->sock, wsi);
 	wsi->position_in_fds_table = context->fds_count;
 	context->fds[context->fds_count].fd = wsi->sock;
 	context->fds[context->fds_count].events = LWS_POLLIN;
-	
+
 	lws_plat_insert_socket_into_fds(context, wsi);
 
 	/* external POLL support via protocol 0 */
@@ -69,32 +85,27 @@ insert_wsi_socket_into_fds(struct libwebsocket_context *context,
 
 int
 remove_wsi_socket_from_fds(struct libwebsocket_context *context,
-						      struct libwebsocket *wsi)
+							  struct libwebsocket *wsi)
 {
 	int m;
 	struct libwebsocket_pollargs pa = { wsi->sock, 0, 0 };
 
 	lws_libev_io(context, wsi, LWS_EV_STOP | LWS_EV_READ | LWS_EV_WRITE);
 
-	if (!--context->fds_count) {
-		context->protocols[0].callback(context, wsi,
-			LWS_CALLBACK_LOCK_POLL,
-			wsi->user_space, (void *) &pa, 0);
-		goto do_ext;
-	}
-
-	if (wsi->sock > context->max_fds) {
-		lwsl_err("Socket fd %d too high (%d)\n",
-						   wsi->sock, context->max_fds);
-		return 1;
-	}
+	// if (wsi->sock > context->max_fds) {
+	// 	lwsl_err("Socket fd %d too high (%d)\n",
+	// 					   wsi->sock, context->max_fds);
+	// 	return 1;
+	// }
 
 	lwsl_info("%s: wsi=%p, sock=%d, fds pos=%d\n", __func__,
-				    wsi, wsi->sock, wsi->position_in_fds_table);
+		wsi, wsi->sock, wsi->position_in_fds_table);
+
+	--context->fds_count;
 
 	context->protocols[0].callback(context, wsi,
 		LWS_CALLBACK_LOCK_POLL,
-		wsi->user_space, (void *)&pa, 0);
+		wsi->user_space, (void *) &pa, 0);
 
 	m = wsi->position_in_fds_table; /* replace the contents for this */
 
@@ -103,28 +114,31 @@ remove_wsi_socket_from_fds(struct libwebsocket_context *context,
 
 	lws_plat_delete_socket_from_fds(context, wsi, m);
 
-	/*
-	 * end guy's fds_lookup entry remains unchanged
-	 * (still same fd pointing to same wsi)
-	 */
-	/* end guy's "position in fds table" changed */
-	context->lws_lookup[context->fds[context->fds_count].fd]->
-						position_in_fds_table = m;
+	if (0 != context->fds_count) {
+		/*
+		* end guy's fds_lookup entry remains unchanged
+		* (still same fd pointing to same wsi)
+		*/
+		/* end guy's "position in fds table" changed */
+		struct libwebsocket *end_wsi = 0;
+		LWS_LOOKUP(context, context->fds[context->fds_count].fd, end_wsi);
+		end_wsi->position_in_fds_table = m;
+	}
+
 	/* deletion guy's lws_lookup entry needs nuking */
-	context->lws_lookup[wsi->sock] = NULL;
+	LWS_LOOKUP_REMOVE(context, wsi->sock);
 	/* removed wsi has no position any more */
 	wsi->position_in_fds_table = -1;
 
-do_ext:
 	/* remove also from external POLL support via protocol 0 */
 	if (wsi->sock) {
 		context->protocols[0].callback(context, wsi,
-		    LWS_CALLBACK_DEL_POLL_FD, wsi->user_space,
-		    (void *) &pa, 0);
+			LWS_CALLBACK_DEL_POLL_FD, wsi->user_space,
+			(void *) &pa, 0);
 	}
 	context->protocols[0].callback(context, wsi,
-				       LWS_CALLBACK_UNLOCK_POLL,
-				       wsi->user_space, (void *) &pa, 0);
+					   LWS_CALLBACK_UNLOCK_POLL,
+					   wsi->user_space, (void *) &pa, 0);
 	return 0;
 }
 
@@ -139,7 +153,7 @@ lws_change_pollfd(struct libwebsocket *wsi, int _and, int _or)
 
 	if (!wsi || !wsi->protocol || wsi->position_in_fds_table < 0)
 		return 1;
-	
+
 	context = wsi->protocol->owning_server;
 	if (!context)
 		return 1;
@@ -165,7 +179,7 @@ lws_change_pollfd(struct libwebsocket *wsi, int _and, int _or)
 	 *         then cancel it to force a restart with our changed events
 	 */
 	if (pa.prev_events != pa.events) {
-		
+
 		if (lws_plat_change_pollfd(context, wsi, pfd)) {
 			lwsl_info("%s failed\n", __func__);
 			return 1;
@@ -174,7 +188,7 @@ lws_change_pollfd(struct libwebsocket *wsi, int _and, int _or)
 		sampled_tid = context->service_tid;
 		if (sampled_tid) {
 			tid = context->protocols[0].callback(context, NULL,
-				     LWS_CALLBACK_GET_THREAD_ID, NULL, NULL, 0);
+					 LWS_CALLBACK_GET_THREAD_ID, NULL, NULL, 0);
 			if (tid != sampled_tid)
 				libwebsocket_cancel_service(context);
 		}
@@ -182,7 +196,7 @@ lws_change_pollfd(struct libwebsocket *wsi, int _and, int _or)
 
 	context->protocols[0].callback(context, wsi,
 		LWS_CALLBACK_UNLOCK_POLL, wsi->user_space, (void *) &pa, 0);
-	
+
 	return 0;
 }
 
@@ -198,27 +212,27 @@ lws_change_pollfd(struct libwebsocket *wsi, int _and, int _or)
 
 LWS_VISIBLE int
 libwebsocket_callback_on_writable(struct libwebsocket_context *context,
-						      struct libwebsocket *wsi)
+							  struct libwebsocket *wsi)
 {
 #ifdef LWS_USE_HTTP2
 	struct libwebsocket *network_wsi, *wsi2;
 	int already;
 
 	lwsl_info("%s: %p\n", __func__, wsi);
-	
+
 	if (wsi->mode != LWS_CONNMODE_HTTP2_SERVING)
 		goto network_sock;
-	
+
 	if (wsi->u.http2.requested_POLLOUT) {
 		lwsl_info("already pending writable\n");
 		return 1;
 	}
-	
+
 	if (wsi->u.http2.tx_credit <= 0) {
 		/*
 		 * other side is not able to cope with us sending
 		 * anything so no matter if we have POLLOUT on our side.
-		 * 
+		 *
 		 * Delay waiting for our POLLOUT until peer indicates he has
 		 * space for more using tx window command in http2 layer
 		 */
@@ -226,21 +240,21 @@ libwebsocket_callback_on_writable(struct libwebsocket_context *context,
 		wsi->u.http2.waiting_tx_credit = 1;
 		return 0;
 	}
-	
+
 	network_wsi = lws_http2_get_network_wsi(wsi);
 	already = network_wsi->u.http2.requested_POLLOUT;
-	
+
 	/* mark everybody above him as requesting pollout */
-	
+
 	wsi2 = wsi;
 	while (wsi2) {
 		wsi2->u.http2.requested_POLLOUT = 1;
 		lwsl_info("mark %p pending writable\n", wsi2);
 		wsi2 = wsi2->u.http2.parent_wsi;
 	}
-	
+
 	/* for network action, act only on the network wsi */
-	
+
 	wsi = network_wsi;
 	if (already)
 		return 1;
@@ -282,7 +296,7 @@ libwebsocket_callback_on_writable_all_protocol(
 	struct libwebsocket *wsi;
 
 	for (n = 0; n < context->fds_count; n++) {
-		wsi = context->lws_lookup[context->fds[n].fd];
+		LWS_LOOKUP(context, context->fds[n].fd, wsi);
 		if (!wsi)
 			continue;
 		if (wsi->protocol == protocol)

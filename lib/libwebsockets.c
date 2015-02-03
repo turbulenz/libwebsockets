@@ -106,7 +106,7 @@ libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 	 * are his extensions okay with him closing?  Eg he might be a mux
 	 * parent and just his ch1 aspect is closing?
 	 */
-	
+
 	if (lws_ext_callback_for_each_active(wsi,
 		      LWS_EXT_CALLBACK_CHECK_OK_TO_REALLY_CLOSE, NULL, 0) > 0) {
 		lwsl_ext("extension vetoed close\n");
@@ -251,7 +251,7 @@ just_kill_connection:
 		lwsl_debug("not calling back closed\n");
 
 	/* deallocate any active extension contexts */
-	
+
 	if (lws_ext_callback_for_each_active(wsi, LWS_EXT_CALLBACK_DESTROY, NULL, 0) < 0)
 		lwsl_warn("extension destruction failed\n");
 #ifndef LWS_NO_EXTENSIONS
@@ -444,7 +444,7 @@ libwebsocket_callback_all_protocol(
 	struct libwebsocket *wsi;
 
 	for (n = 0; n < context->fds_count; n++) {
-		wsi = context->lws_lookup[context->fds[n].fd];
+		LWS_LOOKUP(context, context->fds[n].fd, wsi);
 		if (!wsi)
 			continue;
 		if (wsi->protocol == protocol)
@@ -577,7 +577,7 @@ libwebsocket_rx_flow_allow_all_protocol(
 	struct libwebsocket *wsi;
 
 	for (n = 0; n < context->fds_count; n++) {
-		wsi = context->lws_lookup[context->fds[n].fd];
+		LWS_LOOKUP(context, context->fds[n].fd, wsi);
 		if (!wsi)
 			continue;
 		if (wsi->protocol == protocol)
@@ -622,7 +622,7 @@ int user_callback_handle_rxflow(callback_function callback_function,
  * @context:	pointer to struct libwebsocket_context you want set proxy to
  * @proxy: pointer to c string containing proxy in format address:port
  *
- * Returns 0 if proxy string was parsed and proxy was setup. 
+ * Returns 0 if proxy string was parsed and proxy was setup.
  * Returns -1 if @proxy is NULL or has incorrect format.
  *
  * This is only required if your OS does not provide the http_proxy
@@ -639,7 +639,7 @@ LWS_VISIBLE int
 libwebsocket_set_proxy(struct libwebsocket_context *context, const char *proxy)
 {
 	char *p;
-	
+
 	if (!proxy)
 		return -1;
 
@@ -647,7 +647,7 @@ libwebsocket_set_proxy(struct libwebsocket_context *context, const char *proxy)
 				sizeof(context->http_proxy_address) - 1);
 	context->http_proxy_address[
 				sizeof(context->http_proxy_address) - 1] = '\0';
-	
+
 	p = strchr(context->http_proxy_address, ':');
 	if (!p) {
 		lwsl_err("http_proxy needs to be ads:port\n");
@@ -656,7 +656,7 @@ libwebsocket_set_proxy(struct libwebsocket_context *context, const char *proxy)
 	}
 	*p = '\0';
 	context->http_proxy_port = atoi(p + 1);
-	
+
 	lwsl_notice(" Proxy %s:%u\n", context->http_proxy_address,
 						context->http_proxy_port);
 
@@ -797,11 +797,11 @@ lws_is_ssl(struct libwebsocket *wsi)
  * write on this connection is still buffered, and can't be cleared without
  * returning to the service loop and waiting for the connection to be
  * writeable again.
- * 
+ *
  * If you will try to do >1 libwebsocket_write call inside a single
  * WRITEABLE callback, you must check this after every write and bail if
  * set, ask for a new writeable callback and continue writing from there.
- * 
+ *
  * This is never set at the start of a writeable callback, but any write
  * may set it.
  */
@@ -809,7 +809,7 @@ lws_is_ssl(struct libwebsocket *wsi)
 LWS_VISIBLE int
 lws_partial_buffered(struct libwebsocket *wsi)
 {
-	return !!wsi->truncated_send_len;	
+	return !!wsi->truncated_send_len;
 }
 
 void lws_set_protocol_write_pending(struct libwebsocket_context *context,
@@ -817,7 +817,7 @@ void lws_set_protocol_write_pending(struct libwebsocket_context *context,
 				    enum lws_pending_protocol_send pend)
 {
 	lwsl_info("setting pps %d\n", pend);
-	
+
 	if (wsi->pps)
 		lwsl_err("pps overwrite\n");
 	wsi->pps = pend;
@@ -835,7 +835,7 @@ lws_get_peer_write_allowance(struct libwebsocket *wsi)
 	/* user is only interested in how much he can send, or that he can't  */
 	if (wsi->u.http2.tx_credit <= 0)
 		return 0;
-	
+
 	return wsi->u.http2.tx_credit;
 #else
 	return -1;

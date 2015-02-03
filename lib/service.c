@@ -347,9 +347,11 @@ libwebsocket_service_fd(struct libwebsocket_context *context,
 	int more;
 	struct lws_tokens eff_buf;
 
-	if (context->listen_service_fd)
-		listen_socket_fds_index = context->lws_lookup[
-			     context->listen_service_fd]->position_in_fds_table;
+    if (context->listen_service_fd) {
+        struct libwebsocket *wsi = 0;
+        LWS_LOOKUP(context, context->listen_service_fd, wsi);
+        listen_socket_fds_index = wsi->position_in_fds_table;
+    }
 
 	/*
 	 * you can call us with pollfd = NULL to just allow the once-per-second
@@ -372,7 +374,7 @@ libwebsocket_service_fd(struct libwebsocket_context *context,
 
 		for (n = 0; n < context->fds_count; n++) {
 			m = context->fds[n].fd;
-			wsi = context->lws_lookup[m];
+            LWS_LOOKUP(context, m, wsi);
 			if (!wsi)
 				continue;
 
@@ -397,7 +399,7 @@ libwebsocket_service_fd(struct libwebsocket_context *context,
 		return 0;
 
 	/* no, here to service a socket descriptor */
-	wsi = context->lws_lookup[pollfd->fd];
+    LWS_LOOKUP(context, pollfd->fd, wsi);
 	if (wsi == NULL)
 		/* not lws connection ... leave revents alone and return */
 		return 0;

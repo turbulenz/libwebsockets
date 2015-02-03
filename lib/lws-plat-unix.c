@@ -124,7 +124,7 @@ lws_plat_service(struct libwebsocket_context *context, int timeout_ms)
 		libwebsocket_service_fd(context, NULL);
 		return 0;
 	}
-	
+
 #ifdef LWS_OPENSSL_SUPPORT
 	/* any more will have to set it fresh this time around */
 	context->ssl_flag_buffered_reads = 0;
@@ -141,11 +141,11 @@ lws_plat_service(struct libwebsocket_context *context, int timeout_ms)
 	for (n = 0; n < context->fds_count; n++) {
 #ifdef LWS_OPENSSL_SUPPORT
 		struct libwebsocket *wsi;
-		
-		wsi = context->lws_lookup[context->fds[n].fd];
+
+		LWS_LOOKUP(context, context->fds[n].fd, wsi);
 		if (wsi == NULL)
 			continue;
-		/* 
+		/*
 		 * if he's not flowcontrolled, make sure we service ssl
 		 * pending read data
 		 */
@@ -263,6 +263,11 @@ lws_plat_init_fd_tables(struct libwebsocket_context *context)
 	if (pipe(context->dummy_pipe_fds)) {
 		lwsl_err("Unable to create pipe\n");
 		return 1;
+	}
+
+	for (int i = 0; i < context->max_fds; ++i) {
+		context->lws_lookup_map[i].fd = -1;
+		context->lws_lookup_map[i].wsi = 0;
 	}
 
 	/* use the read end of pipe as first item */

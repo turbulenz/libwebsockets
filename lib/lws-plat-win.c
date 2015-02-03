@@ -104,7 +104,9 @@ lws_plat_service(struct libwebsocket_context *context, int timeout_ms)
 			continue;
 
 		if (pfd->events & LWS_POLLOUT) {
-			if (context->lws_lookup[pfd->fd]->sock_send_blocking)
+			struct libwebsocket *wsi = 0;
+			LWS_LOOKUP(context, pfd->fd, wsi);
+			if (wsi->sock_send_blocking)
 				continue;
 			pfd->revents = LWS_POLLOUT;
 			n = libwebsocket_service_fd(context, pfd);
@@ -142,8 +144,11 @@ lws_plat_service(struct libwebsocket_context *context, int timeout_ms)
 
 	pfd->revents = networkevents.lNetworkEvents;
 
-	if (pfd->revents & LWS_POLLOUT)
-		context->lws_lookup[pfd->fd]->sock_send_blocking = FALSE;
+	if (pfd->revents & LWS_POLLOUT) {
+		struct libwebsocket *wsi = 0;
+		LWS_LOOKUP(context, pfd->fd, wsi);
+		wsi->sock_send_blocking = FALSE;
+	}
 
 	return libwebsocket_service_fd(context, pfd);
 }
@@ -157,7 +162,7 @@ lws_plat_set_socket_options(struct libwebsocket_context *context, int fd)
 	DWORD dwBytesRet;
 	struct tcp_keepalive alive;
 	struct protoent *tcp_proto;
-			
+
 	if (context->ka_time) {
 		/* enable keepalive on this socket */
 		optval = 1;
@@ -169,7 +174,7 @@ lws_plat_set_socket_options(struct libwebsocket_context *context, int fd)
 		alive.keepalivetime = context->ka_time;
 		alive.keepaliveinterval = context->ka_interval;
 
-		if (WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive, sizeof(alive), 
+		if (WSAIoctl(fd, SIO_KEEPALIVE_VALS, &alive, sizeof(alive),
 					      NULL, 0, &dwBytesRet, NULL, NULL))
 			return 1;
 	}
@@ -198,6 +203,11 @@ lws_plat_init_fd_tables(struct libwebsocket_context *context)
 		lwsl_err("Unable to allocate events array for %d connections\n",
 			context->max_fds);
 		return 1;
+	}
+
+	for (int i = 0; i < context->max_fds; ++i) {
+		context->lws_lookup_map[i].fd = -1;
+		context->lws_lookup_map[i].wsi = 0;
 	}
 
 	context->fds_count = 0;
@@ -292,7 +302,7 @@ lws_plat_change_pollfd(struct libwebsocket_context *context,
 		      struct libwebsocket *wsi, struct libwebsocket_pollfd *pfd)
 {
 	long networkevents = LWS_POLLOUT | LWS_POLLHUP;
-		
+
 	if ((pfd->events & LWS_POLLIN))
 		networkevents |= LWS_POLLIN;
 
@@ -325,7 +335,7 @@ lws_plat_open_file(const char* filename, unsigned long* filelen)
 
 LWS_VISIBLE const char *
 lws_plat_inet_ntop(int af, const void *src, char *dst, int cnt)
-{ 
+{
 	WCHAR *buffer;
 	DWORD bufferlen = cnt;
 	BOOL ok = FALSE;
