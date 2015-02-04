@@ -2,6 +2,8 @@
  * downloaded from
  * http://ftp.uninett.no/pub/OpenBSD/src/kerberosV/src/lib/roken/getifaddrs.c
  */
+#include "config.h"
+
 #if !HAVE_GETIFADDRS
 /*
  * Copyright (c) 2000 - 2001 Kungliga Tekniska H�gskolan
