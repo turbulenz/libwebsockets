@@ -422,46 +422,48 @@ struct lws_lookup_entry {
 };
 
 #define LWS_LOOKUP(_CONTEXT, _FD, _RES) 								\
-	{																    \
-		(_RES) = 0;													    \
-		for(size_t index = 0; index < (_CONTEXT)->max_fds; ++index)	    \
-		{															    \
-			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))		    \
-			{														    \
-				(_RES) = (_CONTEXT)->lws_lookup_map[index].wsi;		    \
+	{																	\
+		(_RES) = 0;														\
+		size_t index;													\
+		for(index = 0; index < (_CONTEXT)->max_fds; ++index)			\
+		{																\
+			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))			\
+			{															\
+				(_RES) = (_CONTEXT)->lws_lookup_map[index].wsi;			\
 				break;													\
-			}														    \
-		}															    \
+			}															\
+		}																\
 	}
 
 #define LWS_LOOKUP_INSERT(_CONTEXT, _FD, _WSI)							\
-	{																    \
+	{																	\
 		size_t index;													\
-		for(index = 0; index < (_CONTEXT)->max_fds; ++index)	    	\
-		{															    \
-			if ((_CONTEXT)->lws_lookup_map[index].fd == -1)			    \
-			{														    \
-				(_CONTEXT)->lws_lookup_map[index].fd = (_FD);		    \
-				(_CONTEXT)->lws_lookup_map[index].wsi = (_WSI);		    \
+		for(index = 0; index < (_CONTEXT)->max_fds; ++index)			\
+		{																\
+			if ((_CONTEXT)->lws_lookup_map[index].fd == -1)				\
+			{															\
+				(_CONTEXT)->lws_lookup_map[index].fd = (_FD);			\
+				(_CONTEXT)->lws_lookup_map[index].wsi = (_WSI);			\
 				break;													\
-			}														    \
-		}															    \
+			}															\
+		}																\
 		if (index == (_CONTEXT)->max_fds) {								\
 			lwsl_err("Too many fds, couldn't find slot in lws_lookup_map");	\
 		}																\
 	}
 
 #define LWS_LOOKUP_REMOVE(_CONTEXT, _FD)								\
-	{																    \
-		for(size_t index = 0; index < (_CONTEXT)->max_fds; ++index)	    \
-		{															    \
-			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))		    \
-			{														    \
-				(_CONTEXT)->lws_lookup_map[index].fd = -1;		    	\
-				(_CONTEXT)->lws_lookup_map[index].wsi = 0;		    	\
+	{																	\
+		size_t index;													\
+		for(index = 0; index < (_CONTEXT)->max_fds; ++index)			\
+		{																\
+			if ((_CONTEXT)->lws_lookup_map[index].fd == (_FD))			\
+			{															\
+				(_CONTEXT)->lws_lookup_map[index].fd = -1;				\
+				(_CONTEXT)->lws_lookup_map[index].wsi = 0;				\
 				break;													\
-			}														    \
-		}															    \
+			}															\
+		}																\
 	}
 
 struct libwebsocket_context {

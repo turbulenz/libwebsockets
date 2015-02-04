@@ -265,7 +265,8 @@ lws_plat_init_fd_tables(struct libwebsocket_context *context)
 		return 1;
 	}
 
-	for (int i = 0; i < context->max_fds; ++i) {
+	int i;
+	for (i = 0; i < context->max_fds; ++i) {
 		context->lws_lookup_map[i].fd = -1;
 		context->lws_lookup_map[i].wsi = 0;
 	}
