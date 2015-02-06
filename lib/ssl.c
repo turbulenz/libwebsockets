@@ -208,9 +208,10 @@ lws_context_init_server_ssl(struct lws_context_creation_info *info,
 		else {
 			if (context->protocols[0].callback(context, NULL,
 				LWS_CALLBACK_OPENSSL_CONTEXT_REQUIRES_PRIVATE_KEY,
-						context->ssl_ctx, NULL, 0))
+						context->ssl_ctx, NULL, 0)) {
 				lwsl_err("ssl private key not set\n");
 				return 1;
+			}
 		}
 
 		/* verify private key */
@@ -391,6 +392,32 @@ int lws_context_init_client_ssl(struct lws_context_creation_info *info,
 }
 #endif
 
+LWS_VISIBLE void
+lws_ssl_remove_wsi_from_buffered_list(struct libwebsocket_context *context,
+		     struct libwebsocket *wsi)
+{
+	if (!wsi->pending_read_list_prev &&
+	    !wsi->pending_read_list_next &&
+	    context->pending_read_list != wsi)
+		/* we are not on the list */
+		return;
+
+	/* point previous guy's next to our next */
+	if (!wsi->pending_read_list_prev)
+		context->pending_read_list = wsi->pending_read_list_next;
+	else
+		wsi->pending_read_list_prev->pending_read_list_next =
+			wsi->pending_read_list_next;
+
+	/* point next guy's previous to our previous */
+	if (wsi->pending_read_list_next)
+		wsi->pending_read_list_next->pending_read_list_prev =
+			wsi->pending_read_list_prev;
+
+	wsi->pending_read_list_prev = NULL;
+	wsi->pending_read_list_next = NULL;
+}
+
 LWS_VISIBLE int
 lws_ssl_capable_read(struct libwebsocket_context *context,
 		     struct libwebsocket *wsi, unsigned char *buf, int len)
@@ -399,8 +426,6 @@ lws_ssl_capable_read(struct libwebsocket_context *context,
 
 	if (!wsi->ssl)
 		return lws_ssl_capable_read_no_ssl(context, wsi, buf, len);
-	
-	wsi->buffered_reads_pending = 0;
 
 	n = SSL_read(wsi->ssl, buf, len);
 	if (n >= 0) {
@@ -412,10 +437,17 @@ lws_ssl_capable_read(struct libwebsocket_context *context,
 		 * and if we don't realize, this data will sit there forever
 		 */
 		if (n == len && wsi->ssl && SSL_pending(wsi->ssl)) {
-			context->ssl_flag_buffered_reads = 1;
-			wsi->buffered_reads_pending = 1;
-		}
-		
+			if (!wsi->pending_read_list_next && !wsi->pending_read_list_prev) {
+				/* add us to the linked list of guys with pending ssl */
+				if (context->pending_read_list)
+					context->pending_read_list->pending_read_list_prev = wsi;
+				wsi->pending_read_list_next = context->pending_read_list;
+				wsi->pending_read_list_prev = NULL;
+				context->pending_read_list = wsi;
+			}
+		} else
+			lws_ssl_remove_wsi_from_buffered_list(context, wsi);
+
 		return n;
 	}
 	n = SSL_get_error(wsi->ssl, n);

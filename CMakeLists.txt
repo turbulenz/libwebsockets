@@ -52,7 +52,7 @@ option(LWS_WITHOUT_EXTENSIONS "Don't compile with extensions" OFF)
 option(LWS_WITH_LATENCY "Build latency measuring code into the library" OFF)
 option(LWS_WITHOUT_DAEMONIZE "Don't build the daemonization api" OFF)
 option(LWS_WITH_LIBEV "Compile with support for libev" OFF)
-option(LWS_IPV6 "Compile with support for ipv6" ON)
+option(LWS_IPV6 "Compile with support for ipv6" OFF)
 option(LWS_WITH_HTTP2 "Compile with support for http2" OFF)
 
 # Allow the user to override installation directories.
@@ -361,10 +361,15 @@ endif(UNIX)
 
 
 if (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_GNUCXX)
+    include (CheckCCompilerFlag)
+    CHECK_C_COMPILER_FLAG(-fvisibility=hidden HAVE_VISIBILITY)
+    if (HAVE_VISIBILITY)
+                set(VISIBILITY_FLAG -fvisibility=hidden)
+    endif()
     if (UNIX)
-		set( CMAKE_C_FLAGS "-Wall -Werror -O3 -fvisibility=hidden ${CMAKE_C_FLAGS}" )
+		set( CMAKE_C_FLAGS "-Wall -Werror -O3 ${VISIBILITY_FLAG} ${CMAKE_C_FLAGS}" )
     else(UNIX)
-		set( CMAKE_C_FLAGS "-Wall -O3 -fvisibility=hidden ${CMAKE_C_FLAGS}" )
+		set( CMAKE_C_FLAGS "-Wall -O3 ${VISIBILITY_FLAG} ${CMAKE_C_FLAGS}" )
     endif(UNIX)
 endif ()
 

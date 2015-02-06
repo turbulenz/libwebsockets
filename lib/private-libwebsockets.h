@@ -249,6 +249,12 @@ typedef unsigned __int64 u_int64_t;
 #define MSG_NOSIGNAL SO_NOSIGPIPE
 #endif
 
+#ifdef _WIN32
+#ifndef FD_HASHTABLE_MODULUS
+#define FD_HASHTABLE_MODULUS 32
+#endif
+#endif
+
 #ifndef LWS_MAX_HEADER_LEN
 #define LWS_MAX_HEADER_LEN 1024
 #endif
@@ -412,12 +418,25 @@ struct lws_signal_watcher {
 };
 #endif /* LWS_USE_LIBEV */
 
+#ifdef _WIN32
+#define LWS_FD_HASH(fd) ((fd ^ (fd >> 8) ^ (fd >> 16)) % FD_HASHTABLE_MODULUS)
+struct libwebsocket_fd_hashtable {
+	struct libwebsocket **wsi;
+	int length;
+};
+#endif
+
 struct libwebsocket_context {
 #ifdef _WIN32
 	WSAEVENT *events;
 #endif
 	struct libwebsocket_pollfd *fds;
-	struct libwebsocket **lws_lookup; /* fd to wsi */
+#ifdef _WIN32
+/* different implementation between unix and windows */
+	struct libwebsocket_fd_hashtable fd_hashtable[FD_HASHTABLE_MODULUS];
+#else
+	struct libwebsocket **lws_lookup;  /* fd to wsi */
+#endif
 	int fds_count;
 #ifdef LWS_USE_LIBEV
 	struct ev_loop* io_loop;
@@ -474,7 +493,10 @@ struct libwebsocket_context {
 	unsigned int user_supplied_ssl_ctx:1;
 	SSL_CTX *ssl_ctx;
 	SSL_CTX *ssl_client_ctx;
-	unsigned int ssl_flag_buffered_reads:1;
+	struct libwebsocket *pending_read_list; /* linked list */
+#define lws_ssl_anybody_has_buffered_read(ctx) (ctx->use_ssl && ctx->pending_read_list)
+#else
+#define lws_ssl_anybody_has_buffered_read(ctx) (0)
 #endif
 	struct libwebsocket_protocols *protocols;
 	int count_protocols;
@@ -805,7 +827,6 @@ struct libwebsocket {
 
 	char pending_timeout; /* enum pending_timeout */
 	time_t pending_timeout_limit;
-
 	int sock;
 	int position_in_fds_table;
 #ifdef LWS_LATENCY
@@ -840,8 +861,8 @@ struct libwebsocket {
 #ifdef LWS_OPENSSL_SUPPORT
 	SSL *ssl;
 	BIO *client_bio;
+	struct libwebsocket *pending_read_list_prev, *pending_read_list_next;
 	unsigned int use_ssl:2;
-	unsigned int buffered_reads_pending:1;
 	unsigned int upgraded:1;
 #endif
 
@@ -892,8 +913,20 @@ lws_http_action(struct libwebsocket_context *context, struct libwebsocket *wsi);
 LWS_EXTERN int
 lws_b64_selftest(void);
 
+#ifdef _WIN32
 LWS_EXTERN struct libwebsocket *
 wsi_from_fd(struct libwebsocket_context *context, int fd);
+
+LWS_EXTERN int 
+insert_wsi(struct libwebsocket_context *context, struct libwebsocket *wsi);
+
+LWS_EXTERN int
+delete_from_fd(struct libwebsocket_context *context, int fd);
+#else
+#define wsi_from_fd(A,B)  A->lws_lookup[B] 
+#define insert_wsi(A,B)   A->lws_lookup[B->sock]=B
+#define delete_from_fd(A,B) A->lws_lookup[B]=0
+#endif
 
 LWS_EXTERN int
 insert_wsi_socket_into_fds(struct libwebsocket_context *context,
@@ -1089,6 +1122,7 @@ enum lws_ssl_capable_status {
 #define lws_server_socket_service_ssl(_a, _b, _c, _d, _e) (0)
 #define lws_ssl_close(_a) (0)
 #define lws_ssl_context_destroy(_a)
+#define lws_ssl_remove_wsi_from_buffered_list(_a, _b)
 #else
 #define LWS_SSL_ENABLED(context) (context->use_ssl)
 LWS_EXTERN int openssl_websocket_private_data_index;
@@ -1106,6 +1140,9 @@ LWS_EXTERN int
 lws_ssl_close(struct libwebsocket *wsi);
 LWS_EXTERN void
 lws_ssl_context_destroy(struct libwebsocket_context *context);
+LWS_VISIBLE void
+lws_ssl_remove_wsi_from_buffered_list(struct libwebsocket_context *context,
+		     struct libwebsocket *wsi);
 #ifndef LWS_NO_SERVER
 LWS_EXTERN int
 lws_context_init_server_ssl(struct lws_context_creation_info *info,
@@ -1162,6 +1199,10 @@ lws_ssl_capable_write_no_ssl(struct libwebsocket *wsi, unsigned char *buf, int l
 #define _libwebsocket_rx_flow_control(_a) (0)
 #define lws_handshake_server(_a, _b, _c, _d) (0)
 #endif
+	
+LWS_EXTERN int libwebsockets_get_addresses(struct libwebsocket_context *context,
+			    void *ads, char *name, int name_len,
+			    char *rip, int rip_len);
 
 /*
  * custom allocator
