@@ -78,12 +78,7 @@ remove_wsi_socket_from_fds(struct libwebsocket_context *context,
 
 	lws_libev_io(context, wsi, LWS_EV_STOP | LWS_EV_READ | LWS_EV_WRITE);
 
-	if (!--context->fds_count) {
-		context->protocols[0].callback(context, wsi,
-			LWS_CALLBACK_LOCK_POLL,
-			wsi->user_space, (void *) &pa, 0);
-		goto do_ext;
-	}
+	--context->fds_count;
 
 	if (wsi->sock > context->max_fds) {
 		lwsl_err("Socket fd %d too high (%d)\n",
