@@ -81,7 +81,7 @@ remove_wsi_socket_from_fds(struct libwebsocket_context *context,
 	--context->fds_count;
 
 #ifndef _WIN32
-	if (wsi->sock > context->max_fds) {
+	if (wsi->sock >= context->max_fds) {
 		lwsl_err("Socket fd %d too high (%d)\n",
 						   wsi->sock, context->max_fds);
 		return 1;

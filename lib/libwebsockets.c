@@ -59,7 +59,6 @@ lws_free_wsi(struct libwebsocket *wsi)
 	lws_free_header_table(wsi);
 	lws_free(wsi);
 }
-
 void
 libwebsocket_close_and_free_session(struct libwebsocket_context *context,
 			 struct libwebsocket *wsi, enum lws_close_status reason)
