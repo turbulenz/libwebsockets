@@ -166,7 +166,6 @@ libwebsocket_create_context(struct lws_context_creation_info *info)
 	if (lws_plat_init_lookup(context)) {
 		goto bail;
 	}
-#endif
 
 	if (lws_plat_init_fd_tables(context)) {
 		goto bail;
