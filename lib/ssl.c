@@ -160,10 +160,21 @@ lws_context_init_ssl_library(struct lws_context_creation_info *info)
 #else
 #if defined(LWS_USE_MBEDTLS)
 #else
+
+#if (OPENSSL_VERSION_NUMBER < 0x10100006L)
 	SSL_library_init();
 
 	OpenSSL_add_all_algorithms();
 	SSL_load_error_strings();
+#else
+	OPENSSL_init_ssl(0, NULL);
+
+	OPENSSL_init_crypto(OPENSSL_INIT_ADD_ALL_CIPHERS \
+					| OPENSSL_INIT_ADD_ALL_DIGESTS, NULL);
+
+	OPENSSL_init_ssl(OPENSSL_INIT_LOAD_SSL_STRINGS \
+					| OPENSSL_INIT_LOAD_CRYPTO_STRINGS, NULL);
+#endif
 
 	openssl_websocket_private_data_index =
 		SSL_get_ex_new_index(0, "lws", NULL, NULL, NULL);
