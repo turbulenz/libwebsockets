@@ -315,11 +315,14 @@ lws_plat_set_socket_options(struct lws_vhost *vhost, lws_sockfd_type fd)
 	optval = 1;
 #ifndef _WIN32_WCE
 	tcp_proto = getprotobyname("TCP");
-	if (!tcp_proto) {
-		lwsl_err("getprotobyname() failed with error %d\n", LWS_ERRNO);
-		return 1;
+	if (tcp_proto) {
+		protonbr = tcp_proto->p_proto;
 	}
-	protonbr = tcp_proto->p_proto;
+	else {
+		lwsl_warn("getprotobyname() failed with error %d using constant IPPROTO_TCP\n", LWS_ERRNO);
+		protonbr = IPPROTO_TCP;
+	}
+
 #else
 	protonbr = 6;
 #endif
